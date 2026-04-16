@@ -249,6 +249,15 @@ function extractCuratedHistory(comprehensiveHistory: Content[]): Content[] {
   return curatedHistory;
 }
 
+function cloneHistoryContent(content: Content): Content {
+  return {
+    ...content,
+    parts: content.parts?.map((part) =>
+      typeof part === 'object' && part !== null ? { ...part } : part,
+    ),
+  };
+}
+
 /**
  * Custom error to signal that a stream completed with invalid content,
  * which should trigger a retry.
@@ -621,9 +630,9 @@ export class GeminiChat {
     const history = curated
       ? extractCuratedHistory(this.history)
       : this.history;
-    // Deep copy the history to avoid mutating the history outside of the
-    // chat session.
-    return structuredClone(history);
+    // Return a lightweight clone so callers cannot mutate internal history
+    // without paying the cost of structuredClone across the entire session.
+    return history.map(cloneHistoryContent);
   }
 
   /**

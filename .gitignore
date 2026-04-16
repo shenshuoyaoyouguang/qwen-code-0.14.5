@@ -2,8 +2,12 @@
 node_modules/
 .pnpm-store/
 
+# Claude Code / AI Agent runtime data
+.omx/
+
 # Build outputs
 dist/
+_install/
 build/
 *.tgz
 

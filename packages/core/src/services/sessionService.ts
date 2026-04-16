@@ -578,6 +578,15 @@ function stripThoughtsFromContent(content: Content): Content | null {
   };
 }
 
+function cloneContentForHistory(content: Content): Content {
+  return {
+    ...content,
+    parts: content.parts?.map((part) =>
+      typeof part === 'object' && part !== null ? { ...part } : part,
+    ),
+  };
+}
+
 /**
  * Builds the model-facing chat history (Content[]) from a reconstructed
  * conversation. This keeps UI history intact while applying chat compression
@@ -612,14 +621,16 @@ export function buildApiHistoryFromConversation(
   });
 
   if (compressedHistory && lastCompressionIndex >= 0) {
-    const baseHistory: Content[] = structuredClone(compressedHistory);
+    const baseHistory: Content[] = compressedHistory.map(
+      cloneContentForHistory,
+    );
 
     // Append everything after the compression record (newer turns)
     for (let i = lastCompressionIndex + 1; i < messages.length; i++) {
       const record = messages[i];
       if (record.type === 'system') continue;
       if (record.message) {
-        baseHistory.push(structuredClone(record.message as Content));
+        baseHistory.push(cloneContentForHistory(record.message as Content));
       }
     }
 
@@ -635,7 +646,7 @@ export function buildApiHistoryFromConversation(
   const result = messages
     .map((record) => record.message)
     .filter((message): message is Content => message !== undefined)
-    .map((message) => structuredClone(message));
+    .map((message) => cloneContentForHistory(message));
 
   if (stripThoughtsFromHistory) {
     return result

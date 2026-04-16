@@ -80,6 +80,30 @@ const VALID_APPROVAL_MODE_VALUES = [
   'yolo',
 ] as const;
 
+function normalizeChatCompressionSettings(
+  chatCompression:
+    | {
+        contextPercentageThreshold?: number;
+        tokenThreshold?: number;
+      }
+    | undefined,
+) {
+  if (!chatCompression) {
+    return undefined;
+  }
+
+  const contextPercentageThreshold =
+    chatCompression.contextPercentageThreshold ??
+    chatCompression.tokenThreshold;
+
+  return contextPercentageThreshold === undefined
+    ? chatCompression
+    : {
+        ...chatCompression,
+        contextPercentageThreshold,
+      };
+}
+
 function formatApprovalModeError(value: string): Error {
   return new Error(
     `Invalid approval mode: ${value}. Valid values are: ${VALID_APPROVAL_MODE_VALUES.join(
@@ -266,7 +290,9 @@ export async function parseArguments(): Promise<CliArgs> {
     })
     .option('proxy', {
       type: 'string',
-      description: t('Proxy for Qwen Code, like schema://user:password@host:port'),
+      description: t(
+        'Proxy for Qwen Code, like schema://user:password@host:port',
+      ),
     })
     .deprecateOption(
       'proxy',
@@ -1126,7 +1152,9 @@ export async function loadCliConfig(
     cliVersion: await getCliVersion(),
     webSearch: buildWebSearchConfig(argv, settings, selectedAuthType),
     ideMode,
-    chatCompression: settings.model?.chatCompression,
+    chatCompression: normalizeChatCompressionSettings(
+      settings.model?.chatCompression,
+    ),
     folderTrust,
     interactive,
     trustedFolder,

@@ -108,6 +108,7 @@ export class ChatCompressionService {
     const curatedHistory = chat.getHistory(true);
     const threshold =
       config.getChatCompression()?.contextPercentageThreshold ??
+      config.getChatCompression()?.tokenThreshold ??
       COMPRESSION_TOKEN_THRESHOLD;
 
     // Regardless of `force`, don't do anything if the history is empty.

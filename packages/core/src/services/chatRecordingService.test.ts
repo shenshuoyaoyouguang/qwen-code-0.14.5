@@ -17,10 +17,14 @@ import {
 } from './chatRecordingService.js';
 import * as jsonl from '../utils/jsonl-utils.js';
 import type { Part } from '@google/genai';
+import type { ArtifactResultDisplay } from '../tools/tools.js';
 
 vi.mock('node:path');
 vi.mock('node:child_process');
 vi.mock('node:crypto', () => ({
+  default: {
+    randomBytes: vi.fn(() => Buffer.from('1234567890ab', 'hex')),
+  },
   randomUUID: vi.fn(),
   createHash: vi.fn(() => ({
     update: vi.fn(() => ({
@@ -53,6 +57,8 @@ describe('ChatRecordingService', () => {
       },
       getModel: vi.fn().mockReturnValue('gemini-pro'),
       getDebugMode: vi.fn().mockReturnValue(false),
+      getTruncateToolOutputThreshold: vi.fn().mockReturnValue(50),
+      getTruncateToolOutputLines: vi.fn().mockReturnValue(5),
       getToolRegistry: vi.fn().mockReturnValue({
         getTool: vi.fn().mockReturnValue({
           displayName: 'Test Tool',
@@ -282,6 +288,83 @@ describe('ChatRecordingService', () => {
       expect(record.message).toEqual({ role: 'user', parts: toolResultParts });
       expect(record.toolCallResult).toBeDefined();
       expect(record.toolCallResult?.callId).toBe('call-1');
+    });
+
+    it('should compact oversized tool output into an artifact-backed summary', () => {
+      const largeOutput = `line1\nline2\n${'x'.repeat(120)}`;
+      const toolResultParts: Part[] = [
+        {
+          functionResponse: {
+            id: 'call-2',
+            name: 'shell',
+            response: { output: largeOutput },
+          },
+        },
+      ];
+
+      chatRecordingService.recordToolResult(toolResultParts, {
+        callId: 'call-2',
+        status: 'success',
+        resultDisplay: largeOutput,
+      } as never);
+
+      const record = vi.mocked(jsonl.writeLineSync).mock
+        .calls[0][1] as ChatRecord;
+      const output = (
+        record.message?.parts?.[0] as {
+          functionResponse?: { response?: Record<string, unknown> };
+        }
+      ).functionResponse?.response?.['output'] as string;
+
+      expect(output).toBe(largeOutput);
+      expect(record.toolCallResult?.resultDisplay).toMatchObject({
+        type: 'artifact_reference',
+      });
+      const artifactDisplay = record.toolCallResult
+        ?.resultDisplay as ArtifactResultDisplay;
+      expect(artifactDisplay.summary).toContain('main tool output');
+    });
+
+    it('should preserve diff metadata when compacting oversized edit results', () => {
+      const largeNewContent = `const x = 1;\n${'y'.repeat(200)}`;
+      const toolResultParts: Part[] = [
+        {
+          functionResponse: {
+            id: 'call-3',
+            name: 'write_file',
+            response: { output: 'file written' },
+          },
+        },
+      ];
+
+      chatRecordingService.recordToolResult(toolResultParts, {
+        callId: 'call-3',
+        status: 'success',
+        resultDisplay: {
+          fileDiff: `--- a/test.ts\n+++ b/test.ts\n+${largeNewContent}`,
+          fileName: 'test.ts',
+          originalContent: '',
+          newContent: largeNewContent,
+          diffStat: {
+            model_added_lines: 2,
+            model_removed_lines: 0,
+            model_added_chars: largeNewContent.length,
+            model_removed_chars: 0,
+            user_added_lines: 0,
+            user_removed_lines: 0,
+            user_added_chars: 0,
+            user_removed_chars: 0,
+          },
+        },
+      } as never);
+
+      const record = vi.mocked(jsonl.writeLineSync).mock
+        .calls[0][1] as ChatRecord;
+      expect(record.toolCallResult?.resultDisplay).toMatchObject({
+        type: 'artifact_reference',
+        fileName: 'test.ts',
+        newContent: largeNewContent,
+      });
     });
 
     it('should chain tool result correctly with parentUuid', () => {

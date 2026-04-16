@@ -20,6 +20,7 @@ import type {
   AnsiOutput,
   Config,
   McpToolProgressData,
+  ArtifactResultDisplay,
 } from '@qwen-code/qwen-code-core';
 import { AgentExecutionDisplay } from '../subagents/index.js';
 import { PlanSummaryDisplay } from '../PlanSummaryDisplay.js';
@@ -51,6 +52,7 @@ type DisplayRendererResult =
   | { type: 'string'; data: string }
   | { type: 'diff'; data: { fileDiff: string; fileName: string } }
   | { type: 'task'; data: AgentResultDisplay }
+  | { type: 'artifact'; data: ArtifactResultDisplay }
   | { type: 'ansi'; data: AnsiOutput };
 
 /**
@@ -99,6 +101,18 @@ const useResultDisplayRenderer = (
       return {
         type: 'task',
         data: resultDisplay as AgentResultDisplay,
+      };
+    }
+
+    if (
+      typeof resultDisplay === 'object' &&
+      resultDisplay !== null &&
+      'type' in resultDisplay &&
+      resultDisplay.type === 'artifact_reference'
+    ) {
+      return {
+        type: 'artifact',
+        data: resultDisplay as ArtifactResultDisplay,
       };
     }
 
@@ -403,6 +417,19 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               <AnsiOutputText
                 data={effectiveDisplayRenderer.data}
                 availableTerminalHeight={availableHeight}
+              />
+            )}
+            {effectiveDisplayRenderer.type === 'artifact' && (
+              <StringResultRenderer
+                data={[
+                  effectiveDisplayRenderer.data.summary,
+                  effectiveDisplayRenderer.data.preview,
+                ]
+                  .filter(Boolean)
+                  .join('\n\n')}
+                renderAsMarkdown={false}
+                availableHeight={availableHeight}
+                childWidth={innerWidth}
               />
             )}
             {effectiveDisplayRenderer.type === 'string' && (

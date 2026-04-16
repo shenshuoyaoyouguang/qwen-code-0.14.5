@@ -35,6 +35,8 @@ const debugLogger = createDebugLogger('TOOL_SCHEDULER');
 import {
   ToolConfirmationOutcome,
   ApprovalMode,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   logToolCall,
   ToolErrorType,
   ToolCallEvent,
@@ -69,6 +71,10 @@ import levenshtein from 'fast-levenshtein';
 import { getPlanModeSystemReminder } from './prompts.js';
 import { ShellToolInvocation } from '../tools/shell.js';
 import { IdeClient } from '../ide/ide-client.js';
+import {
+  compactToolResultDisplay,
+  type ToolResultCompactionOptions,
+} from '../utils/toolResultMemory.js';
 
 const TRUNCATION_PARAM_GUIDANCE =
   'Note: Your previous response was truncated due to max_tokens limit, ' +
@@ -415,6 +421,29 @@ export class CoreToolScheduler {
     this.chatRecordingService = options.chatRecordingService;
   }
 
+  private getToolResultCompactionOptions(): ToolResultCompactionOptions {
+    const artifactRoot =
+      this.config.storage?.getProjectTempDir?.() && this.config.getSessionId?.()
+        ? `${this.config.storage.getProjectTempDir()}/tool-result-artifacts/${this.config.getSessionId()}`
+        : undefined;
+    return {
+      thresholdChars:
+        this.config.getTruncateToolOutputThreshold?.() ??
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+      thresholdLines:
+        this.config.getTruncateToolOutputLines?.() ??
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+      artifactDir: artifactRoot,
+    };
+  }
+
+  private compactToolResultDisplay(
+    resultDisplay: ToolResultDisplay | undefined,
+  ): ToolResultDisplay | undefined {
+    const options = this.getToolResultCompactionOptions();
+    return compactToolResultDisplay(resultDisplay, options);
+  }
+
   private setStatusInternal(
     targetCallId: string,
     status: 'success',
@@ -562,7 +591,7 @@ export class CoreToolScheduler {
                   },
                 },
               ],
-              resultDisplay,
+              resultDisplay: this.compactToolResultDisplay(resultDisplay),
               error: undefined,
               errorType: undefined,
               contentLength: errorMessage.length,
@@ -1598,7 +1627,9 @@ export class CoreToolScheduler {
         const successResponse: ToolCallResponseInfo = {
           callId,
           responseParts: response,
-          resultDisplay: toolResult.returnDisplay,
+          resultDisplay: this.compactToolResultDisplay(
+            toolResult.returnDisplay,
+          ),
           error: undefined,
           errorType: undefined,
           contentLength,

@@ -82,8 +82,7 @@ export interface ToolInvocation<
 export abstract class BaseToolInvocation<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolInvocation<TParams, TResult>
-{
+> implements ToolInvocation<TParams, TResult> {
   constructor(readonly params: TParams) {}
 
   abstract getDescription(): string;
@@ -194,8 +193,7 @@ export interface ToolBuilder<
 export abstract class DeclarativeTool<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolBuilder<TParams, TResult>
-{
+> implements ToolBuilder<TParams, TResult> {
   constructor(
     readonly name: string,
     readonly displayName: string,
@@ -504,6 +502,7 @@ export interface AgentResultDisplay {
   // If the subagent is awaiting approval for a tool call,
   // this contains the confirmation details for inline UI rendering.
   pendingConfirmation?: ToolCallConfirmationDetails;
+  artifacts?: ToolArtifactRef[];
 
   toolCalls?: Array<{
     callId: string;
@@ -536,12 +535,38 @@ export interface McpToolProgressData {
   message?: string;
 }
 
+export interface ToolArtifactRef {
+  kind:
+    | 'function_output'
+    | 'diff'
+    | 'original_content'
+    | 'new_content'
+    | 'task_result'
+    | 'tool_result';
+  path: string;
+  sizeBytes: number;
+  preview?: string;
+  encoding?: 'utf8';
+}
+
+export interface ArtifactResultDisplay {
+  type: 'artifact_reference';
+  summary: string;
+  preview?: string;
+  artifacts: ToolArtifactRef[];
+}
+
+export interface ArtifactFileDiffResultDisplay
+  extends ArtifactResultDisplay, FileDiff {}
+
 export type ToolResultDisplay =
   | string
   | FileDiff
   | TodoResultDisplay
   | PlanResultDisplay
   | AgentResultDisplay
+  | ArtifactResultDisplay
+  | ArtifactFileDiffResultDisplay
   | AnsiOutputDisplay
   | McpToolProgressData;
 

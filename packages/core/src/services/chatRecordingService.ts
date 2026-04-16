@@ -18,6 +18,10 @@ import {
 import * as jsonl from '../utils/jsonl-utils.js';
 import { getGitBranch } from '../utils/gitUtils.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
+import {
+  compactToolResultDisplay,
+  type ToolResultCompactionOptions,
+} from '../utils/toolResultMemory.js';
 
 const debugLogger = createDebugLogger('CHAT_RECORDING');
 import type {
@@ -108,9 +112,9 @@ export interface ChatCompressionRecordPayload {
   /** Compression metrics/status returned by the compression service */
   info: ChatCompressionInfo;
   /**
-   * Snapshot of the new history contents that the model should see after
-   * compression (summary turns + retained tail). Stored as Content[] for
-   * resume reconstruction.
+   * Compressed history snapshot used for resume reconstruction.
+   * This is persisted in already-compacted form to avoid replaying oversized
+   * historical payloads back into memory.
    */
   compressedHistory: Content[];
 }
@@ -207,6 +211,22 @@ export class ChatRecordingService {
     }
 
     return chatsDir;
+  }
+
+  private getToolResultArtifactDir(): string {
+    return path.join(
+      this.config.storage.getProjectTempDir(),
+      'tool-result-artifacts',
+      this.getSessionId(),
+    );
+  }
+
+  private getToolResultCompactionOptions(): ToolResultCompactionOptions {
+    return {
+      thresholdChars: this.config.getTruncateToolOutputThreshold(),
+      thresholdLines: this.config.getTruncateToolOutputLines(),
+      artifactDir: this.getToolResultArtifactDir(),
+    };
   }
 
   /**
@@ -346,6 +366,7 @@ export class ChatRecordingService {
     toolCallResult?: Partial<ToolCallResponseInfo> & { status: Status },
   ): void {
     try {
+      const compactionOptions = this.getToolResultCompactionOptions();
       const record: ChatRecord = {
         ...this.createBaseRecord('tool_result'),
         message: createUserContent(message),
@@ -353,22 +374,28 @@ export class ChatRecordingService {
 
       if (toolCallResult) {
         // special case for task executions - we don't want to record the tool calls
+        const compactedDisplay = compactToolResultDisplay(
+          toolCallResult.resultDisplay,
+          compactionOptions,
+        );
         if (
           typeof toolCallResult.resultDisplay === 'object' &&
           toolCallResult.resultDisplay !== null &&
           'type' in toolCallResult.resultDisplay &&
           toolCallResult.resultDisplay.type === 'task_execution'
         ) {
-          const taskResult = toolCallResult.resultDisplay as AgentResultDisplay;
           record.toolCallResult = {
             ...toolCallResult,
             resultDisplay: {
-              ...taskResult,
+              ...(compactedDisplay as AgentResultDisplay),
               toolCalls: [],
             },
           };
         } else {
-          record.toolCallResult = toolCallResult;
+          record.toolCallResult = {
+            ...toolCallResult,
+            resultDisplay: compactedDisplay,
+          };
         }
       }
 

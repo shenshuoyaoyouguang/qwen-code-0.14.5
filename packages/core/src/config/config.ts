@@ -207,6 +207,8 @@ export interface BugCommandSettings {
 
 export interface ChatCompressionSettings {
   contextPercentageThreshold?: number;
+  /** Legacy alias kept for compatibility with older settings files. */
+  tokenThreshold?: number;
 }
 
 /**

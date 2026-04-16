@@ -1460,7 +1460,7 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
 });
 
 describe('loadCliConfig model selection', () => {
-  it.skip('selects a model from settings.json if provided', async () => {
+  it.todo('selects a model from settings.json if provided', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     const config = await loadCliConfig(
@@ -1477,7 +1477,7 @@ describe('loadCliConfig model selection', () => {
     expect(config.getModel()).toBe('qwen3-coder-plus');
   });
 
-  it.skip('uses the default gemini model if nothing is set', async () => {
+  it.todo('uses the default gemini model if nothing is set', async () => {
     process.argv = ['node', 'script.js']; // No model set.
     const argv = await parseArguments();
     const config = await loadCliConfig(
@@ -1682,6 +1682,24 @@ describe('loadCliConfig chatCompression', () => {
     const settings: Settings = {};
     const config = await loadCliConfig(settings, argv, undefined, []);
     expect(config.getChatCompression()).toBeUndefined();
+  });
+
+  it('should map legacy tokenThreshold to contextPercentageThreshold', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments();
+    const settings = {
+      model: {
+        chatCompression: {
+          tokenThreshold: 0.95,
+        },
+      },
+    } as Settings;
+
+    const config = await loadCliConfig(settings, argv, undefined, []);
+    expect(config.getChatCompression()).toEqual({
+      tokenThreshold: 0.95,
+      contextPercentageThreshold: 0.95,
+    });
   });
 });
 

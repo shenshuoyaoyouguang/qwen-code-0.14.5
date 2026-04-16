@@ -1,15 +1,21 @@
 ## 产品文档
+
 `prd/qwen-code-architecture.md` - Qwen Code 项目深度架构分析（架构图、六大核心机制、集成测试案例、SDK/MCP/频道/扩展详解）
 
 ## 前端文档
+
 修改 CLI UI 时参考 `prd/qwen-code-architecture.md` 中"CLI 包"和"频道系统"章节
 
 ## 后端文档
+
 修改 Core 逻辑时参考 `prd/qwen-code-architecture.md` 中"核心包深度剖析"和"六大核心机制"章节
 
 ## 当前任务文档
 
+- `workflow/trellis-porting.md` - Trellis 功能移植到 Qwen Code 的完整规划（功能评估、移植路线图、审核流程）
+
 ## 全局重要记忆
+
 - Qwen Code 基于 Google Gemini CLI 二次开发，保留 Apache-2.0 许可证
 - 所有 ContentGenerator 实现统一接口，OpenAI 兼容接口可接入 DashScope/OpenRouter/Fireworks AI
 - 频道系统基于 ACP (Agent Client Protocol) 协议桥接，扩展新频道需继承 ChannelBase

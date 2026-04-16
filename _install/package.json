@@ -1,0 +1,1 @@
+{"name":"@qwen-code/monorepo","private":true,"workspaces":["./cli","./core","./web-templates","./channels/base","./channels/telegram","./channels/weixin","./channels/dingtalk","./channels/plugin-example"]}

@@ -125,6 +125,36 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   Lsp: 'lsp',
   LspTool: 'lsp',
 
+  // Task management tools
+  task_create: 'task_create',
+  TaskCreate: 'task_create',
+  TaskCreateTool: 'task_create',
+
+  task_list: 'task_list',
+  TaskList: 'task_list',
+  TaskListTool: 'task_list',
+
+  task_start: 'task_start',
+  TaskStart: 'task_start',
+  TaskStartTool: 'task_start',
+
+  task_finish: 'task_finish',
+  TaskFinish: 'task_finish',
+  TaskFinishTool: 'task_finish',
+
+  // Cron tools
+  cron_create: 'cron_create',
+  CronCreate: 'cron_create',
+  CronCreateTool: 'cron_create',
+
+  cron_list: 'cron_list',
+  CronList: 'cron_list',
+  CronListTool: 'cron_list',
+
+  cron_delete: 'cron_delete',
+  CronDelete: 'cron_delete',
+  CronDeleteTool: 'cron_delete',
+
   // Legacy edit tool name
   replace: 'edit',
 };

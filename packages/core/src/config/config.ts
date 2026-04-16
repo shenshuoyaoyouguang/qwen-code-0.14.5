@@ -43,6 +43,7 @@ import {
 } from '../services/fileSystemService.js';
 import { GitService } from '../services/gitService.js';
 import { CronScheduler } from '../services/cronScheduler.js';
+import { TaskService } from '../services/taskService.js';
 
 // Tools
 import { AskUserQuestionTool } from '../tools/askUserQuestion.js';
@@ -60,6 +61,10 @@ import { ShellTool } from '../tools/shell.js';
 import { SkillTool } from '../tools/skill.js';
 import { AgentTool } from '../tools/agent.js';
 import { TodoWriteTool } from '../tools/todoWrite.js';
+import { TaskCreateTool } from '../tools/task-create.js';
+import { TaskListTool } from '../tools/task-list.js';
+import { TaskStartTool } from '../tools/task-start.js';
+import { TaskFinishTool } from '../tools/task-finish.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { WebFetchTool } from '../tools/web-fetch.js';
 import { WebSearchTool } from '../tools/web-search/index.js';
@@ -209,6 +214,22 @@ export interface ChatCompressionSettings {
   contextPercentageThreshold?: number;
   /** Legacy alias kept for compatibility with older settings files. */
   tokenThreshold?: number;
+}
+
+/**
+ * Settings for Trellis task management system.
+ */
+export interface TrellisSettings {
+  /** Enable Trellis task management features. */
+  enabled?: boolean;
+  /** Auto-create journal file when starting a task. */
+  autoCreateJournal?: boolean;
+  /** Max lines per journal file before creating a new one. */
+  maxJournalLines?: number;
+  /** Auto-commit journal and workspace changes when finishing a task. */
+  autoCommitOnFinish?: boolean;
+  /** Inject current task context when session starts. */
+  injectContextOnStart?: boolean;
 }
 
 /**
@@ -387,6 +408,7 @@ export interface ConfigParameters {
   outputLanguageFilePath?: string;
   maxSessionTurns?: number;
   clearContextOnIdle?: ClearContextOnIdleSettings;
+  trellis?: TrellisSettings;
   sessionTokenLimit?: number;
   experimentalZedIntegration?: boolean;
   cronEnabled?: boolean;
@@ -576,6 +598,7 @@ export class Config {
 
   private readonly maxSessionTurns: number;
   private readonly clearContextOnIdle: ClearContextOnIdleSettings;
+  private readonly trellis: TrellisSettings;
   private readonly sessionTokenLimit: number;
   private readonly listExtensions: boolean;
   private readonly overrideExtensions?: string[];
@@ -709,6 +732,13 @@ export class Config {
         params.clearContextOnIdle?.toolResultsThresholdMinutes ?? 60,
       toolResultsNumToKeep:
         params.clearContextOnIdle?.toolResultsNumToKeep ?? 5,
+    };
+    this.trellis = {
+      enabled: params.trellis?.enabled ?? false,
+      autoCreateJournal: params.trellis?.autoCreateJournal ?? true,
+      maxJournalLines: params.trellis?.maxJournalLines ?? 2000,
+      autoCommitOnFinish: params.trellis?.autoCommitOnFinish ?? true,
+      injectContextOnStart: params.trellis?.injectContextOnStart ?? true,
     };
     this.sessionTokenLimit = params.sessionTokenLimit ?? -1;
     this.experimentalZedIntegration =
@@ -1360,6 +1390,10 @@ export class Config {
     return this.clearContextOnIdle;
   }
 
+  getTrellis(): TrellisSettings {
+    return this.trellis;
+  }
+
   getSessionTokenLimit(): number {
     return this.sessionTokenLimit;
   }
@@ -1785,6 +1819,16 @@ export class Config {
       this.cronScheduler = new CronScheduler();
     }
     return this.cronScheduler;
+  }
+
+  /**
+   * Returns the task service for task management.
+   * Always uses the current session ID to ensure session isolation.
+   * A new instance is created on each call to guarantee the service
+   * reflects the current session (e.g., after /clear or session resume).
+   */
+  getTaskService(sessionId?: string): TaskService {
+    return new TaskService(sessionId ?? this.getSessionId());
   }
 
   isCronEnabled(): boolean {
@@ -2296,6 +2340,13 @@ export class Config {
     await registerCoreTool(ShellTool, this);
     await registerCoreTool(MemoryTool);
     await registerCoreTool(TodoWriteTool, this);
+    // Register Trellis task management tools (gated by trellis.enabled setting)
+    if (this.getTrellis().enabled) {
+      await registerCoreTool(TaskCreateTool, this);
+      await registerCoreTool(TaskListTool, this);
+      await registerCoreTool(TaskStartTool, this);
+      await registerCoreTool(TaskFinishTool, this);
+    }
     await registerCoreTool(AskUserQuestionTool, this);
     !this.sdkMode && (await registerCoreTool(ExitPlanModeTool, this));
     await registerCoreTool(WebFetchTool, this);

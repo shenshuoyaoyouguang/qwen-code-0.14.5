@@ -225,9 +225,221 @@
 
 ---
 
-## 八、后续行动
+## 八、执行计划（2026-04-17 更新）
 
-- [ ] 确定第一阶段优先移植的具体模块
-- [ ] 分配移植任务责任人
-- [ ] 建立 CI/CD 审核流程
-- [ ] 创建 Trellis 源文件的本地引用分支（可选）
+### 第一阶段：任务管理核心
+
+#### 1.1 任务数据模型
+
+**新建**: `packages/core/src/tools/taskTypes.ts`
+
+```typescript
+// 磁盘持久化结构（对应 Trellis TaskData）
+export interface TaskData {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  dev_type: string;
+  scope: string;
+  package?: string;
+  priority: TaskPriority;
+  assignee?: string;
+  branch?: string;
+  children: string[];
+  parent?: string;
+  notes: string[];
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+  session_id?: string;
+  tags: string[];
+}
+
+export type TaskStatus =
+  | 'planning'
+  | 'in_progress'
+  | 'review'
+  | 'completed'
+  | 'blocked';
+export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3';
+
+// 运行时只读视图（对应 Trellis TaskInfo）
+export interface TaskInfo {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignee?: string;
+  branch?: string;
+  children: TaskInfo[];
+  parentId?: string;
+  package?: string;
+  scope?: string;
+  devType?: string;
+  notes: string[];
+  tags: string[];
+  isRoot: boolean;
+}
+
+// 索引文件结构
+export interface TaskIndex {
+  tasks: Record<string, string>; // id → file path
+  order: string[];
+  updated_at: string;
+}
+```
+
+#### 1.2 TaskService 服务类
+
+**新建**: `packages/core/src/services/taskService.ts`
+
+- 存储路径: `{Storage.getRuntimeBaseDir()}/tasks/index.json` + `TASK-{uuid}.json`
+- 方法: `listTasks`, `getTask`, `createTask`, `updateTask`, `deleteTask`, `startTask`, `finishTask`, `resolveHierarchy`
+- 原子写入: 先写临时文件再 rename（Windows 兼容）
+
+#### 1.3 工具层实现
+
+| 文件                                     | 工具名        | 功能                               |
+| ---------------------------------------- | ------------- | ---------------------------------- |
+| `packages/core/src/tools/task-create.ts` | `task_create` | 创建新任务                         |
+| `packages/core/src/tools/task-start.ts`  | `task_start`  | 启动任务（planning → in_progress） |
+| `packages/core/src/tools/task-finish.ts` | `task_finish` | 完成任务（review → completed）     |
+| `packages/core/src/tools/task-list.ts`   | `task_list`   | 列表/过滤任务                      |
+
+#### 1.4 工具注册
+
+**修改**: `packages/core/src/config/config.ts` → `createToolRegistry()` 方法
+**修改**: `packages/core/src/tools/tool-names.ts`
+
+#### 1.5 SessionJournalService（会话记录）
+
+**新建**: `packages/core/src/services/sessionJournalService.ts`
+
+- 行为: 每个 `task_start` 创建 `.task-{id}/journal-{seq}.md`
+- 超过 2000 行自动创建新文件（循环日志）
+- 维护 `index.md` 索引
+- `task_finish` 时追加 git commit
+
+#### 1.6 上下文聚合器
+
+**新建**: `packages/cli/src/acp-integration/session/trellis-context.ts`
+
+- `TrellisContextAggregator.buildContext()` 聚合激活任务 + journal + 任务树
+
+#### 1.7 配置扩展
+
+**修改**: `packages/cli/src/config/settingsSchema.ts`
+
+- 新增 `context.trellis.enabled`, `context.trellis.autoCreateJournal`, `context.trellis.maxJournalEntries`
+
+### 第二阶段：规范系统集成
+
+- 扩展 `.qwen/rules.md` → `.qwen/spec/**/*.md` 分层规范
+- 新增 `specLoader.ts`
+- SessionStart 钩子自动注入任务上下文
+
+### 第三阶段：高级功能
+
+- Git Worktree 并行: `qwen worktree` 子命令
+- PR 创建: `task_create_pr` 工具
+- 远程模板注册表
+
+---
+
+## 九、文件清单
+
+| 操作     | 文件路径                                                      |
+| -------- | ------------------------------------------------------------- |
+| **新建** | `packages/core/src/tools/taskTypes.ts`                        |
+| **新建** | `packages/core/src/services/taskService.ts`                   |
+| **新建** | `packages/core/src/services/sessionJournalService.ts`         |
+| **新建** | `packages/core/src/tools/task-create.ts`                      |
+| **新建** | `packages/core/src/tools/task-start.ts`                       |
+| **新建** | `packages/core/src/tools/task-finish.ts`                      |
+| **新建** | `packages/core/src/tools/task-list.ts`                        |
+| **新建** | `packages/cli/src/acp-integration/session/trellis-context.ts` |
+| **修改** | `packages/core/src/tools/tool-names.ts`                       |
+| **修改** | `packages/core/src/config/config.ts`                          |
+| **修改** | `packages/cli/src/config/settingsSchema.ts`                   |
+
+---
+
+## 十、风险评估
+
+| 风险                              | 等级 | 缓解策略                                     |
+| --------------------------------- | ---- | -------------------------------------------- |
+| `TaskData` 与 `TodoItem` 字段冲突 | 中   | 完全独立的类型，`TaskData` 不继承 `TodoItem` |
+| 工作区路径冲突                    | 低   | `todos/` vs `tasks/` 目录隔离                |
+| Git 操作 Windows 兼容             | 低   | 使用 `simple-git`，已有验证                  |
+
+---
+
+## 十一、后续行动
+
+- [x] 确定第一阶段优先移植的具体模块（2026-04-17）
+- [x] 探索 Trellis 和 Qwen Code 代码结构（2026-04-17）
+- [x] 制定详细执行计划（2026-04-17）
+- [x] 移植 taskTypes.ts 数据模型（2026-04-17）
+- [x] 移植 taskService.ts 服务类（2026-04-17）
+- [x] 实现 task-create/task-list 工具（2026-04-17）
+- [x] 实现 task-start/task-finish 工具（2026-04-17）
+- [x] 集成工具到 config.ts（2026-04-17）
+- ✅ 移植 sessionJournalService.ts（会话记录服务）（2026-04-17）
+- ✅ 添加配置扩展 settingsSchema.ts（2026-04-17）
+- ✅ 实现 TrellisContextAggregator（上下文聚合器）（2026-04-17）
+- ✅ 编写单元测试（taskService.test.ts / sessionJournalService.test.ts / taskTypes.test.ts，39 个测试全部通过）（2026-04-17）
+- ⏳ 代码审查 - 等待前置任务
+
+### 第二阶段进度追踪（2026-04-17）
+
+| 任务                             | 状态    | 执行代理          |
+| -------------------------------- | ------- | ----------------- |
+| SessionJournalService.ts         | ✅ 完成 | a92125656245f15f9 |
+| settingsSchema.ts (trellis 配置) | ✅ 完成 | ac20cce023d398b13 |
+| TrellisContextAggregator         | ✅ 完成 | afe80bff3a30caee2 |
+
+### 第二阶段完成清单（2026-04-17）
+
+| 文件                                                          | 状态    | 说明                                              |
+| ------------------------------------------------------------- | ------- | ------------------------------------------------- |
+| `packages/core/src/services/sessionJournalService.ts`         | ✅ 完成 | 会话记录核心功能，651 行                          |
+| `packages/cli/src/config/settingsSchema.ts`                   | ✅ 完成 | 新增 `context.trellis` 配置段                     |
+| `packages/core/src/config/config.ts`                          | ✅ 完成 | 新增 `TrellisSettings` 接口和 `getTrellis()` 方法 |
+| `packages/cli/src/acp-integration/session/trellis-context.ts` | ✅ 完成 | TrellisContextAggregator，修复编译错误            |
+
+### 单元测试完成清单（2026-04-17）
+
+| 文件                                                       | 测试用例数 | 状态        |
+| ---------------------------------------------------------- | ---------- | ----------- |
+| `packages/core/src/tools/taskTypes.test.ts`                | 11         | ✅ 全部通过 |
+| `packages/core/src/services/taskService.test.ts`           | 19         | ✅ 全部通过 |
+| `packages/core/src/services/sessionJournalService.test.ts` | 9          | ✅ 全部通过 |
+| **合计**                                                   | **39**     | **✅**      |
+
+- [ ] CI/CD 流程建立
+
+### 第一阶段完成清单（2026-04-17）
+
+| 文件                                        | 状态    | 说明            |
+| ------------------------------------------- | ------- | --------------- |
+| `packages/core/src/tools/taskTypes.ts`      | ✅ 完成 | 完整类型定义    |
+| `packages/core/src/services/taskService.ts` | ✅ 完成 | CRUD + 状态转换 |
+| `packages/core/src/tools/task-create.ts`    | ✅ 完成 | 创建任务工具    |
+| `packages/core/src/tools/task-list.ts`      | ✅ 完成 | 列表筛选工具    |
+| `packages/core/src/tools/task-start.ts`     | ✅ 完成 | 启动任务工具    |
+| `packages/core/src/tools/task-finish.ts`    | ✅ 完成 | 完成任务工具    |
+| `packages/core/src/tools/tool-names.ts`     | ✅ 完成 | 工具名称常量    |
+| `packages/core/src/config/config.ts`        | ✅ 完成 | 工具注册        |
+
+### TypeScript 编译状态
+
+- ✅ 无新增编译错误
+- ⚠️ 8 个预存测试错误（与本次移植无关）
+- ✅ 39 个单元测试全部通过（taskTypes / taskService / sessionJournalService）
+- ✅ MEDIUM 问题已全部修复（getRepoRoot 最大深度限制 / 静默异常改为 warn 日志 / CJK 截断函数 / 导入路径修正）
+- ✅ P1/P2 审查问题已修复（工具注册按 trellis.enabled 门控 / CLI 转发 trellis 配置 / 核心包重建）

@@ -21,6 +21,10 @@ import type {
   Config,
   McpToolProgressData,
   ArtifactResultDisplay,
+  TaskListResultDisplay,
+  TaskCreatedResultDisplay,
+  TaskStartedResultDisplay,
+  TaskFinishedResultDisplay,
 } from '@qwen-code/qwen-code-core';
 import { AgentExecutionDisplay } from '../subagents/index.js';
 import { PlanSummaryDisplay } from '../PlanSummaryDisplay.js';
@@ -53,7 +57,11 @@ type DisplayRendererResult =
   | { type: 'diff'; data: { fileDiff: string; fileName: string } }
   | { type: 'task'; data: AgentResultDisplay }
   | { type: 'artifact'; data: ArtifactResultDisplay }
-  | { type: 'ansi'; data: AnsiOutput };
+  | { type: 'ansi'; data: AnsiOutput }
+  | { type: 'task_list'; data: TaskListResultDisplay }
+  | { type: 'task_created'; data: TaskCreatedResultDisplay }
+  | { type: 'task_started'; data: TaskStartedResultDisplay }
+  | { type: 'task_finished'; data: TaskFinishedResultDisplay };
 
 /**
  * Custom hook to determine the type of result display and return appropriate rendering info
@@ -153,6 +161,39 @@ const useResultDisplayRenderer = (
       return { type: 'ansi', data: resultDisplay.ansiOutput as AnsiOutput };
     }
 
+    // Check for task_* result displays
+    if (
+      typeof resultDisplay === 'object' &&
+      resultDisplay !== null &&
+      'type' in resultDisplay
+    ) {
+      const type = (resultDisplay as { type: string }).type;
+      if (type === 'task_list') {
+        return {
+          type: 'task_list',
+          data: resultDisplay as TaskListResultDisplay,
+        };
+      }
+      if (type === 'task_created') {
+        return {
+          type: 'task_created',
+          data: resultDisplay as TaskCreatedResultDisplay,
+        };
+      }
+      if (type === 'task_started') {
+        return {
+          type: 'task_started',
+          data: resultDisplay as TaskStartedResultDisplay,
+        };
+      }
+      if (type === 'task_finished') {
+        return {
+          type: 'task_finished',
+          data: resultDisplay as TaskFinishedResultDisplay,
+        };
+      }
+    }
+
     // Default to string
     return {
       type: 'string',
@@ -250,6 +291,103 @@ const StringResultRenderer: React.FC<{
 /**
  * Component to render diff results
  */
+/**
+ * Component to render task results (task_list, task_created, task_started, task_finished)
+ */
+const TaskResultRenderer: React.FC<{
+  data:
+    | TaskListResultDisplay
+    | TaskCreatedResultDisplay
+    | TaskStartedResultDisplay
+    | TaskFinishedResultDisplay;
+  availableHeight?: number;
+  childWidth: number;
+}> = ({ data, availableHeight, childWidth }) => {
+  // 如果用户明确请求 JSON 格式，直接渲染 JSON
+  if (data.type === 'task_list' && data.format === 'json') {
+    return (
+      <StringResultRenderer
+        data={JSON.stringify(data.tasks, null, 2)}
+        renderAsMarkdown={false}
+        availableHeight={availableHeight}
+        childWidth={childWidth}
+      />
+    );
+  }
+
+  const lines: string[] = [];
+
+  if (data.type === 'task_list') {
+    if (data.tasks.length === 0) {
+      lines.push('暂无任务');
+    } else {
+      lines.push(`共有 ${data.tasks.length} 个任务：`);
+      lines.push('');
+      for (const task of data.tasks) {
+        const statusIcon =
+          task.status === 'completed'
+            ? '✅'
+            : task.status === 'in_progress'
+              ? '🔄'
+              : task.status === 'blocked'
+                ? '🚫'
+                : '📋';
+        lines.push(`${statusIcon} [${task.id}] ${task.title} — ${task.status}`);
+        lines.push(
+          `   优先级: ${task.priority}  |  标签: ${(task.tags || []).join(', ') || '无'}`,
+        );
+        lines.push('');
+      }
+    }
+  } else {
+    const task = data.task;
+    const typeLabel =
+      data.type === 'task_created'
+        ? '创建'
+        : data.type === 'task_started'
+          ? '启动'
+          : '完成';
+    const statusIcon =
+      data.type === 'task_created'
+        ? '📋'
+        : data.type === 'task_started'
+          ? '🔄'
+          : '✅';
+
+    lines.push(`${statusIcon} 任务${typeLabel}：`);
+
+    lines.push(`   ID: ${task.id}`);
+    lines.push(`   标题: ${task.title}`);
+    lines.push(`   状态: ${task.status}`);
+    lines.push(`   优先级: ${task.priority}`);
+
+    if ('started_at' in task && task.started_at) {
+      lines.push(`   开始时间: ${task.started_at}`);
+    }
+    if ('completed_at' in task && task.completed_at) {
+      lines.push(`   完成时间: ${task.completed_at}`);
+    }
+    if (task.tags && task.tags.length > 0) {
+      lines.push(`   标签: ${task.tags.join(', ')}`);
+    }
+    if ('notes' in task && task.notes && task.notes.length > 0) {
+      lines.push(`   备注: ${task.notes.join('; ')}`);
+    }
+  }
+
+  return (
+    <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+      <Box flexDirection="column">
+        {lines.map((line, i) => (
+          <Text key={i} wrap="wrap" color={theme.text.primary}>
+            {line}
+          </Text>
+        ))}
+      </Box>
+    </MaxSizedBox>
+  );
+};
+
 const DiffResultRenderer: React.FC<{
   data: { fileDiff: string; fileName: string };
   availableHeight?: number;
@@ -436,6 +574,16 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               <StringResultRenderer
                 data={effectiveDisplayRenderer.data}
                 renderAsMarkdown={renderOutputAsMarkdown}
+                availableHeight={availableHeight}
+                childWidth={innerWidth}
+              />
+            )}
+            {(effectiveDisplayRenderer.type === 'task_list' ||
+              effectiveDisplayRenderer.type === 'task_created' ||
+              effectiveDisplayRenderer.type === 'task_started' ||
+              effectiveDisplayRenderer.type === 'task_finished') && (
+              <TaskResultRenderer
+                data={effectiveDisplayRenderer.data}
                 availableHeight={availableHeight}
                 childWidth={innerWidth}
               />

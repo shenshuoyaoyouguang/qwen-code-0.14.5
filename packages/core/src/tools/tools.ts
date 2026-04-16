@@ -568,7 +568,11 @@ export type ToolResultDisplay =
   | ArtifactResultDisplay
   | ArtifactFileDiffResultDisplay
   | AnsiOutputDisplay
-  | McpToolProgressData;
+  | McpToolProgressData
+  | TaskListResultDisplay
+  | TaskCreatedResultDisplay
+  | TaskStartedResultDisplay
+  | TaskFinishedResultDisplay;
 
 export interface FileDiff {
   fileDiff: string;
@@ -596,6 +600,86 @@ export interface TodoResultDisplay {
     content: string;
     status: 'pending' | 'in_progress' | 'completed';
   }>;
+}
+
+// 任务列表显示类型
+export interface TaskListResultDisplay {
+  type: 'task_list';
+  tasks: Array<{
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    dev_type?: string;
+    scope?: string;
+    status: string;
+    priority: string;
+    parent?: string;
+    tags?: string[];
+    created_at?: string;
+    updated_at?: string;
+  }>;
+  format: 'table' | 'json';
+}
+
+// 任务创建结果显示类型
+export interface TaskCreatedResultDisplay {
+  type: 'task_created';
+  task: {
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    dev_type?: string;
+    scope?: string;
+    status: string;
+    priority: string;
+    parent?: string;
+    tags?: string[];
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+export interface TaskStartedResultDisplay {
+  type: 'task_started';
+  task: {
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    dev_type?: string;
+    scope?: string;
+    status: string;
+    priority: string;
+    parent?: string;
+    tags?: string[];
+    created_at: string;
+    updated_at: string;
+    started_at?: string;
+    completed_at?: string;
+  };
+}
+
+export interface TaskFinishedResultDisplay {
+  type: 'task_finished';
+  task: {
+    id: string;
+    name: string;
+    title: string;
+    description?: string;
+    dev_type?: string;
+    scope?: string;
+    status: string;
+    priority: string;
+    parent?: string;
+    tags?: string[];
+    notes?: string[];
+    created_at: string;
+    updated_at: string;
+    started_at?: string;
+    completed_at?: string;
+  };
 }
 
 export interface PlanResultDisplay {

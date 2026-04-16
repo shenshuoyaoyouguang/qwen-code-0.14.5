@@ -1195,6 +1195,7 @@ export async function loadCliConfig(
             : undefined,
         }
       : undefined,
+    trellis: settings.context?.trellis,
   });
 
   if (lspEnabled) {
